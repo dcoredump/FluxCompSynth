@@ -6,8 +6,13 @@
     Author - Love Nystrom.
 */
 
+// NewSoftwareSerial version
+
 #include <FluxSynth.h>
 #include <PgmChange.h>
+#include <NewSoftSerial.h>
+
+NewSoftSerial midiport(255,4);
 
 FluxSynth syn;
 
@@ -32,13 +37,13 @@ void initChan( byte Chan, byte Patch, byte Vol, byte Rev, byte Chor, byte Bend )
 #define InitMasterVol  100
 
 bool sendMidiByte( byte B ) { // Output routine for FluxSynth.
-  Serial.write( B );
+  midiport.write( B );
   return true;
   }
     
 void setup()
 {
-  Serial.begin( 31250 ); // MIDI baudrate
+  midiport.begin(31250);
   syn.sendByte = sendMidiByte;
   syn.begin();
   syn.midiReset();
