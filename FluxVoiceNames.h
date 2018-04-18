@@ -1,3 +1,6 @@
+//
+// Storing names of the voices in PROGMEM
+//
 const char _voice0[] PROGMEM = "GrandPiano";
 const char _voice1[] PROGMEM = "BrightPiano";
 const char _voice2[] PROGMEM = "ElecGrandPiano";
@@ -255,7 +258,7 @@ const char _voice253[] PROGMEM = "OneNoteJam";
 const char _voice254[] PROGMEM = "WaterBells";
 const char _voice255[] PROGMEM = "JungleTune";
 
-const char * const voice_name[] PROGMEM =
+const char * const _voice_name[] PROGMEM =
 {
 	_voice0,
 	_voice1,

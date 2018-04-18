@@ -1,0 +1,6 @@
+UI:
+https://github.com/ondryaso/lcdui/blob/master/src/test.cpp
+https://github.com/vonnieda/ScreenUi (https://www.youtube.com/watch?v=fMjPy8N6kG0)
+http://www.cohesivecomputing.co.uk/hackatronics/arduino-lcd-menu-library/ (https://www.youtube.com/watch?v=_4zCxL3suIQ)
+
+
