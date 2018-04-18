@@ -4,18 +4,22 @@
 // (c)2018 H. Wirtz <dcoredump@googlemail.com>
 //
 
-#include <FlexamySynth.h>
+#include <FluxSynth.h>
 #include <PgmChange.h>
 #include <Encoder.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <NewSoftSerial.h>
 #include "FlexaPgm.h"
 
 // Belegung für 16x4 LCD-Modul QC2204A LCD2004 I2C-Controller
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
+// Outgoing serial port
+NewSoftSerial midiport(255,4);
+
 // Synth
-FlexamySynth synth;
+FluxSynth synth;
 
 extern char _voice;
 
@@ -40,7 +44,9 @@ void setup()
   lcd.setCursor(4, 1);
   lcd.print(F("Flexama LCD synth"));
 
+  midiport.begin(31250);
   synth.begin();
+  synth.sendByte = sendMidiByte;
   synth.midiReset();
   synth.GS_Reset();
 }
@@ -48,6 +54,12 @@ void setup()
 void loop()
 {
 
+}
+
+bool sendMidiByte( byte B )
+{ // Output routine for FluxSynth.
+  midiport.write( B );
+  return true;
 }
 
 void init_synth(byte Chan, byte Patch, byte Vol, byte Rev, byte Chor, byte Bend)
