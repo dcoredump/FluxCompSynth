@@ -1,0 +1,55 @@
+
+NO NONSENSE OPEN SOURCE LICENSE
+
+    (aka. No Profiteering Open Source License)
+
+Copyright (c) <YEAR>, <OWNER>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+(*) Redistributions of source work must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+(*) Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+   
+(*) Neither the name of the copywriter(s) nor the names of any contributors
+    other than yourself may be used to endorse or promote products derived 
+    from this work without specific prior written permission.
+
+(*) Except for Your own efforts, You may not demand payment for this work 
+    without written permission from the original author(s).
+
+    Explanation, 4th clause:
+
+    You may f.ex. charge for Your own efforts if You include this work in derivative 
+    works of Your own, or You may extract a reasonable charge for the distribution 
+    media and mailing cost if You send a disk containing the work to a 3rd party, 
+    but You may not charge for this work itself without written permission from 
+    the copywriter(s). 
+
+DISCLAIMER:
+
+THIS WORK IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS WORK, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+(
+    Footnote 2012:
+    This is an open source license, though not ratified by the OSI,
+    because OSI will not acknowledge a license that forbids 3rd parties
+    from profiteering on other people's work without compensation.
+    Caveat Emptor.
+)
