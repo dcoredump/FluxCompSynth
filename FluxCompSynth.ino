@@ -12,13 +12,12 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C (https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library) */
 //#define ENCODER_DO_NOT_USE_INTERRUPTS // Avoid problems with NewSoftwareSerial
-#include <RotaryEncoder.h> /* https://github.com/mathertel/RotaryEncoder */
+#include <RotaryEncoderDir.h> /* https://github.com/dcoredump/RotaryEncoderDir.git */
 #include <Bounce2.h> /* https://github.com/thomasfredericks/Bounce2 */
-#include "FluxVoiceNames.h"
+#include "FluxVoiceNames.h" // Voice names in PROGMEM
 
 #define LED_PIN 13
 
-//#define LCD_I2C_ADDRESS 0x27
 #define LCD_I2C_ADDRESS 0x3f
 #define LCD_CHARS 20
 #define LCD_LINES 4
@@ -33,14 +32,41 @@
 #define ENCODER2_PIN_B 8
 #define ENCODER2_BUTTON_PIN 11
 #define DEBOUNCE_INTERVAL_MS 5
-#define ROTARYSTEPS 2
-#define ROTARYMIN 0
-#define ROTARYMAX 16
 
 #define POT1_PIN A0
 #define POT2_PIN A1
 #define POT3_PIN A2
 #define POT4_PIN A3
+
+struct SynthGlobal
+{
+  int8_t volume;  // negative means OFF
+  uint8_t reverb_type;
+  uint8_t reverb_level;
+  uint8_t chorus_type;
+  uint8_t chorus_level;
+  uint8_t clipping;
+} synth_config;
+
+struct SynthVoice
+{
+  uint8_t patch;
+  int8_t volume;  // negative means OFF
+  int8_t pan;     // 0=middle
+  int8_t transpose;
+  uint8_t reverb_send;
+  uint8_t chorus_send;
+  uint8_t bend_range;
+} synth_voice_config[15]; // Channel 10 has a special handling for Drums
+
+struct SynthDrums
+{
+  uint8_t drumkit;
+  int8_t volume;  // negative means OFF
+  int8_t pan;     // 0=middle
+  uint8_t reverb_send;
+  uint8_t chorus_send;
+} synth_drums_config;
 
 //**************************************************************************
 // GLOBALS
@@ -49,23 +75,27 @@
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
 
 // Outgoing serial port
-NewSoftSerial midiport(255, FLUXAMA_MIDI_IN_PIN);
+NewSoftSerial midiport(255, FLUXAMA_MIDI_IN_PIN); // 255 = OFF
 
 // Synth
 FluxSynth synth;
 
 // Encoder
-RotaryEncoder Encoder1(ENCODER1_PIN_A, ENCODER1_PIN_B);
-RotaryEncoder Encoder2(ENCODER2_PIN_A, ENCODER2_PIN_B);
+RotaryEncoderDir Encoder1(ENCODER1_PIN_A, ENCODER1_PIN_B);
+RotaryEncoderDir Encoder2(ENCODER2_PIN_A, ENCODER2_PIN_B);
 
 // Buttons (debouncer)
 Bounce Button1 = Bounce(ENCODER1_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 
+// div
+char itoa_buf[11];
+
+//
 //**************************************************************************
 // MAIN FUNCTIONS
 
-void setup()
+void setup(void)
 {
   Serial.begin(115200);
 
@@ -77,24 +107,22 @@ void setup()
   lcd.clear();
   lcd.display();
 
-  /*G
-    uint8_t voice;
-    uint8_t bank;
-    char b[16];
+//------------------------<TESTCODE>
+  uint8_t voice;
+  uint8_t bank;
+  char b[16];
 
-    for (bank = 0; bank <= 1; bank++)
-    {
+  for (bank = 0; bank <= 1; bank++)
+  {
     for (voice = 0; voice <= 127; voice++)
     {
-      Serial.print(bank, DEC);
-      Serial.print(":");
-      Serial.print(voice, DEC);
-      Serial.print(" ");
+      show(1, 0, itoa(bank, itoa_buf, 10));
+      show(1, 2, itoa(voice, itoa_buf, 10));
       voiceName(b, bank, voice);
-      Serial.println(b);
+      show(1, 4, b);
     }
-    }
-  */
+  }
+//------------------------</TESTCODE>
 
   show(0, 0, "FluxCompSynth");
 
@@ -111,15 +139,14 @@ void setup()
   pinMode(POT3_PIN, INPUT_PULLUP);
   pinMode(POT4_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW );
+  digitalWrite(LED_PIN, LOW);
 
   //lcd.clear();
 }
 
-void loop()
+void loop(void)
 {
-  static int8_t enc_pos[MAX_ENCODER] = { 0, 0};
-  int8_t new_pos;
+  static int8_t v;
 
   // do the update stuff
   Encoder1.tick();
@@ -128,22 +155,12 @@ void loop()
   Button2.update();
 
   // Encoder1 handling
-  new_pos = Encoder1.getPosition() * ROTARYSTEPS;
-  if(new_pos < ROTARYMIN)
+  int8_t dir1 = Encoder1.hasChanged();
+  if (dir1)
   {
-    Encoder1.setPosition(ROTARYMIN / ROTARYSTEPS);
-    new_pos = ROTARYMIN;
-  }
-  else if (new_pos > ROTARYMAX)
-  {
-    Encoder1.setPosition(ROTARYMAX / ROTARYSTEPS);
-    new_pos = ROTARYMAX;
-  }
-  if (enc_pos[0] != new_pos)
-  {
-    Serial.print(new_pos);
-    Serial.println();
-    enc_pos[0] = new_pos;
+    encoder_move(dir1, -8, 8, long(&v));
+    show(2, 0, itoa(dir1, itoa_buf, 10));
+    show(2, 2, itoa(v, itoa_buf, 10));
   }
 
   // Get the updated value :
@@ -183,14 +200,27 @@ void voiceName(char *buffer, uint8_t bank, uint8_t program)
   strcpy_P(buffer, (char*)pgm_read_word(&(_voice_name[bank * 128 + program])));
 }
 
-void show(uint8_t x, uint8_t y, char* string)
+void show(uint8_t x, uint8_t y, char *string)
 {
   lcd.setCursor(x, y);
   lcd.print(string);
 
   Serial.print(x, DEC);
-  Serial.print("/");
+  Serial.print(" / ");
   Serial.print(y, DEC);
-  Serial.print(":");
+  Serial.print(": ");
   Serial.println(string);
 }
+
+void encoder_move(int8_t dir, int8_t min, int8_t max, long *value)
+{
+  if (value + dir < min)
+    value = min;
+  else if (value + dir > max)
+    value = max;
+  else
+    value += dir;
+
+  return (value);
+}
+
