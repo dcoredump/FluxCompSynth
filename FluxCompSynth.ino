@@ -88,8 +88,8 @@ RotaryEncoderDir Encoder2(ENCODER2_PIN_A, ENCODER2_PIN_B);
 Bounce Button1 = Bounce(ENCODER1_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 
-// div
-char itoa_buf[11];
+// Diverse buffers
+char _buf10[11];
 
 //
 //**************************************************************************
@@ -107,7 +107,7 @@ void setup(void)
   lcd.clear();
   lcd.display();
 
-//------------------------<TESTCODE>
+  //------------------------<TESTCODE>
   uint8_t voice;
   uint8_t bank;
   char b[16];
@@ -116,13 +116,13 @@ void setup(void)
   {
     for (voice = 0; voice <= 127; voice++)
     {
-      show(1, 0, itoa(bank, itoa_buf, 10));
-      show(1, 2, itoa(voice, itoa_buf, 10));
+      show(1, 0, itoa(bank, _buf10, 10));
+      show(1, 2, itoa(voice, _buf10, 10));
       voiceName(b, bank, voice);
       show(1, 4, b);
     }
   }
-//------------------------</TESTCODE>
+  //------------------------</TESTCODE>
 
   show(0, 0, "FluxCompSynth");
 
@@ -146,7 +146,8 @@ void setup(void)
 
 void loop(void)
 {
-  static int8_t v;
+  static int8_t v1;
+  static int8_t v2;
 
   // do the update stuff
   Encoder1.tick();
@@ -158,11 +159,19 @@ void loop(void)
   int8_t dir1 = Encoder1.hasChanged();
   if (dir1)
   {
-    encoder_move(dir1, -8, 8, long(&v));
-    show(2, 0, itoa(dir1, itoa_buf, 10));
-    show(2, 2, itoa(v, itoa_buf, 10));
+    encoder_move(dir1, -8, 8, long(&v1));
+    show(2, 0, itoa(dir1, _buf10, 10));
+    show(2, 2, itoa(v1, _buf10, 10));
   }
 
+  // Encoder2 handling
+  int8_t dir2 = Encoder2.hasChanged();
+  if (dir2)
+  {
+    encoder_move(dir2, 0, 127, long(&v2));
+    show(2, 5, itoa(dir2, _buf10, 10));
+    show(2, 7, itoa(v2, _buf10, 10));
+  }
   // Get the updated value :
   bool value = Button1.read();
 
