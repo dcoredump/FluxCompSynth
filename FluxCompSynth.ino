@@ -16,6 +16,8 @@
 #include <Bounce2.h> /* https://github.com/thomasfredericks/Bounce2 */
 #include "FluxVoiceNames.h" // Voice names in PROGMEM
 
+#define DEBUG 1
+
 #define LED_PIN 13
 
 #define LCD_I2C_ADDRESS 0x3f
@@ -97,7 +99,9 @@ char _buf10[11];
 
 void setup(void)
 {
+#ifdef DEBUG
   Serial.begin(115200);
+#endif
 
   lcd.init();
   lcd.blink_off();
@@ -107,7 +111,9 @@ void setup(void)
   lcd.clear();
   lcd.display();
 
-  //------------------------<TESTCODE>
+  show(0, 0, 20, "FluxCompSynth", false);
+  
+/*  //------------------------<TESTCODE>
   uint8_t voice;
   uint8_t bank;
   char b[16];
@@ -116,16 +122,14 @@ void setup(void)
   {
     for (voice = 0; voice <= 127; voice++)
     {
-      show(1, 0, itoa(bank, _buf10, 10));
-      show(1, 2, itoa(voice, _buf10, 10));
+      show(1, 0, 1, itoa(bank, _buf10, 10), true);
+      show(1, 2, 3, itoa(voice, _buf10, 10), true);
       voiceName(b, bank, voice);
-      show(1, 4, b);
+      show(1, 6, 16, b, false);
     }
   }
   //------------------------</TESTCODE>
-
-  show(0, 0, "FluxCompSynth");
-
+*/
   midiport.begin(31250);
   synth.begin();
   synth.sendByte = sendMidiByte;
@@ -146,8 +150,8 @@ void setup(void)
 
 void loop(void)
 {
-  static int8_t v1;
-  static int8_t v2;
+  static int8_t v1=-4;
+  static uint8_t v2=98;
 
   // do the update stuff
   Encoder1.tick();
@@ -159,18 +163,18 @@ void loop(void)
   int8_t dir1 = Encoder1.hasChanged();
   if (dir1)
   {
-    encoder_move(dir1, -8, 8, long(&v1));
-    show(2, 0, itoa(dir1, _buf10, 10));
-    show(2, 2, itoa(v1, _buf10, 10));
+    v1=int8_t(encoder_move(dir1, -8, 8, v1));
+    show(2, 0, 2, itoa(dir1, _buf10, 10), true);
+    show(2, 3, 2, itoa(v1, _buf10, 10), true);
   }
 
   // Encoder2 handling
   int8_t dir2 = Encoder2.hasChanged();
   if (dir2)
   {
-    encoder_move(dir2, 0, 127, long(&v2));
-    show(2, 5, itoa(dir2, _buf10, 10));
-    show(2, 7, itoa(v2, _buf10, 10));
+    v2=uint8_t(encoder_move(dir2, 0, 127, v2));
+    show(2, 6, 2, itoa(dir2, _buf10, 10), true);
+    show(2, 9, 3, itoa(v2, _buf10, 10), true);
   }
   // Get the updated value :
   bool value = Button1.read();
@@ -182,7 +186,6 @@ void loop(void)
   else {
     digitalWrite(LED_PIN, LOW );
   }
-
 }
 
 //**************************************************************************
@@ -209,19 +212,38 @@ void voiceName(char *buffer, uint8_t bank, uint8_t program)
   strcpy_P(buffer, (char*)pgm_read_word(&(_voice_name[bank * 128 + program])));
 }
 
-void show(uint8_t x, uint8_t y, char *string)
+void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool justify_right)
 {
-  lcd.setCursor(x, y);
-  lcd.print(string);
+  char tmp[LCD_CHARS + 1];
+  char *s = tmp;
+  uint8_t l = strlen(str);
 
-  Serial.print(x, DEC);
-  Serial.print(" / ");
-  Serial.print(y, DEC);
-  Serial.print(": ");
-  Serial.println(string);
+  memset(tmp, 0x20, LCD_CHARS);
+  tmp[LCD_CHARS] = '\0';
+
+  if (l > field_size)
+    l = field_size;
+
+  if (justify_right == true)
+      s += field_size - l;
+
+  strncpy(s, str, l);
+  s[l+1] = '\0';
+  
+  lcd.setCursor(pos_x, pos_y);
+  lcd.print(tmp);
+
+#ifdef DEBUG
+  Serial.print(pos_y, DEC);
+  Serial.print(F("/"));
+  Serial.print(pos_x, DEC);
+  Serial.print(F(": ["));
+  Serial.print(tmp);
+  Serial.println(F("]"));
+#endif
 }
 
-void encoder_move(int8_t dir, int8_t min, int8_t max, long *value)
+long encoder_move(int8_t dir, int8_t min, int8_t max, long value)
 {
   if (value + dir < min)
     value = min;
