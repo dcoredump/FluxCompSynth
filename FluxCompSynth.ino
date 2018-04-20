@@ -42,33 +42,24 @@
 
 struct SynthGlobal
 {
-  int8_t volume;  // negative means OFF
-  uint8_t reverb_type;
-  uint8_t reverb_level;
-  uint8_t chorus_type;
-  uint8_t chorus_level;
-  uint8_t clipping;
+  int8_t volume = 100; // negative means OFF
+  uint8_t reverb_type = REV_ROOM1;
+  uint8_t reverb_level = REV_DEFLEVEL;
+  uint8_t chorus_type = CHO_CHORUS1;
+  uint8_t chorus_level = 0;
+  uint8_t clipping = SOFT_CLIP;
 } synth_config;
 
 struct SynthVoice
 {
-  uint8_t patch;
-  int8_t volume;  // negative means OFF
-  int8_t pan;     // 0=middle
-  int8_t transpose;
-  uint8_t reverb_send;
-  uint8_t chorus_send;
-  uint8_t bend_range;
-} synth_voice_config[15]; // Channel 10 has a special handling for Drums
-
-struct SynthDrums
-{
-  uint8_t drumkit;
-  int8_t volume;  // negative means OFF
-  int8_t pan;     // 0=middle
-  uint8_t reverb_send;
-  uint8_t chorus_send;
-} synth_drums_config;
+  uint8_t patch = 0;
+  int8_t volume = 64; // negative means OFF
+  int8_t pan = 0;   // 0=middle
+  int8_t transpose = 0;
+  uint8_t reverb_send = 0;
+  uint8_t chorus_send = 0;
+  uint8_t bend_range = 12;
+} synth_voice_config[16];
 
 //**************************************************************************
 // GLOBALS
@@ -90,7 +81,7 @@ RotaryEncoderDir Encoder2(ENCODER2_PIN_A, ENCODER2_PIN_B);
 Bounce Button1 = Bounce(ENCODER1_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 
-// Diverse buffers
+// Temp buffers
 char _buf10[11];
 
 //
@@ -112,24 +103,24 @@ void setup(void)
   lcd.display();
 
   show(0, 0, 20, "FluxCompSynth", false);
-  
-/*  //------------------------<TESTCODE>
-  uint8_t voice;
-  uint8_t bank;
-  char b[16];
 
-  for (bank = 0; bank <= 1; bank++)
-  {
-    for (voice = 0; voice <= 127; voice++)
+  /*  //------------------------<TESTCODE>
+    uint8_t voice;
+    uint8_t bank;
+    char b[16];
+
+    for (bank = 0; bank <= 1; bank++)
     {
-      show(1, 0, 1, itoa(bank, _buf10, 10), true);
-      show(1, 2, 3, itoa(voice, _buf10, 10), true);
-      voiceName(b, bank, voice);
-      show(1, 6, 16, b, false);
+      for (voice = 0; voice <= 127; voice++)
+      {
+        show(1, 0, 1, itoa(bank, _buf10, 10), true);
+        show(1, 2, 3, itoa(voice, _buf10, 10), true);
+        voiceName(b, bank, voice);
+        show(1, 6, 16, b, false);
+      }
     }
-  }
-  //------------------------</TESTCODE>
-*/
+    //------------------------</TESTCODE>
+  */
   midiport.begin(31250);
   synth.begin();
   synth.sendByte = sendMidiByte;
@@ -145,13 +136,18 @@ void setup(void)
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
+  char tmp[17];
+  voiceName(tmp, 0, 0);
+  show(1, 0, 16, tmp, false);
+  show(1, 18, 2, '0', true);
+
   //lcd.clear();
 }
 
 void loop(void)
 {
-  static int8_t v1=-4;
-  static uint8_t v2=98;
+  static uint8_t voice = 0;
+  static uint8_t channel = 1;
 
   // do the update stuff
   Encoder1.tick();
@@ -163,19 +159,31 @@ void loop(void)
   int8_t dir1 = Encoder1.hasChanged();
   if (dir1)
   {
-    v1=int8_t(encoder_move(dir1, -8, 8, v1));
-    show(2, 0, 2, itoa(dir1, _buf10, 10), true);
-    show(2, 3, 2, itoa(v1, _buf10, 10), true);
+    char voice_name[17];
+    voice = uint8_t(encoder_move(dir1, 0, 255, voice));
+    if (channel == 10)
+    {
+      synth_voice_config[channel-1].patch = _drum_prog_map[voice % 5];
+      strcpy(voice_name,_drum_name[voice % 5]);
+      voice=voice % 5;
+    }
+    else
+    {
+      synth_voice_config[channel-1].patch = voice;
+      voiceName(voice_name, voice / 128, voice % 128);
+    }
+    show(1, 0, 16, voice_name, false);
+    initSynth(channel, voice, 64, 0, 0, 0);
   }
 
   // Encoder2 handling
   int8_t dir2 = Encoder2.hasChanged();
   if (dir2)
   {
-    v2=uint8_t(encoder_move(dir2, 0, 127, v2));
-    show(2, 6, 2, itoa(dir2, _buf10, 10), true);
-    show(2, 9, 3, itoa(v2, _buf10, 10), true);
+    channel = uint8_t(encoder_move(dir2, 1, 16, channel));
+    show(1, 18, 2, itoa(channel, _buf10, 10), true);
   }
+  
   // Get the updated value :
   bool value = Button1.read();
 
@@ -185,6 +193,21 @@ void loop(void)
   }
   else {
     digitalWrite(LED_PIN, LOW );
+  }
+
+  boolean no = false;
+  if (millis() % 2000 == 0)
+  {
+    if (no == false)
+    {
+      synth.noteOn( 1, 64, 100 );
+      no = true;
+    }
+    else
+    {
+      synth.noteOff( 1, 64 );
+      no = false;
+    }
   }
 }
 
@@ -225,11 +248,11 @@ void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool just
     l = field_size;
 
   if (justify_right == true)
-      s += field_size - l;
+    s += field_size - l;
 
   strncpy(s, str, l);
-  s[l+1] = '\0';
-  
+  s[field_size] = '\0';
+
   lcd.setCursor(pos_x, pos_y);
   lcd.print(tmp);
 
@@ -243,7 +266,7 @@ void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool just
 #endif
 }
 
-long encoder_move(int8_t dir, int8_t min, int8_t max, long value)
+long encoder_move(int8_t dir, int16_t min, int16_t max, long value)
 {
   if (value + dir < min)
     value = min;
