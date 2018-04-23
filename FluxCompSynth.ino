@@ -81,8 +81,13 @@ RotaryEncoderDir Encoder2(ENCODER2_PIN_A, ENCODER2_PIN_B);
 Bounce Button1 = Bounce(ENCODER1_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 
+// vars
+uint8_t voice = 0;
+uint8_t channel = 1;
+uint8_t bank = PATCH_BANK0;
+
 // Temp buffers
-char _buf10[11];
+//char _buf10[11];
 
 //
 //**************************************************************************
@@ -102,7 +107,7 @@ void setup(void)
   lcd.clear();
   lcd.display();
 
-  show(0, 0, 20, "FluxCompSynth", false);
+  show_string(0, 0, 20, "FluxCompSynth");
 
   /*  //------------------------<TESTCODE>
     uint8_t voice;
@@ -136,83 +141,87 @@ void setup(void)
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  char tmp[17];
-  voiceName(tmp, 0, 0);
-  show(1, 0, 16, tmp, false);
-  show(1, 18, 2, '0', true);
-
   //lcd.clear();
 }
 
 void loop(void)
 {
-  static uint8_t voice = 0;
-  static uint8_t channel = 1;
-
+  int8_t dir1=0;
+  int8_t dir2=0;
+  int8_t but1=0;
+  int8_t but2=0;
+  
   // do the update stuff
   Encoder1.tick();
   Encoder2.tick();
-  Button1.update();
+  if (but1=Button1.update())
+  {
+    if (Button1.fell())
+    {
+      synth_voice_config[channel].patch = voice;
+      initSynth(channel, bank, voice, 64, 0, 0, 0);
+      Serial.println("Storing...");
+    }
+  }
   Button2.update();
 
   // Encoder1 handling
-  int8_t dir1 = Encoder1.hasChanged();
+  dir1 = Encoder1.hasChanged();
   if (dir1)
   {
-    char voice_name[17];
-    voice = uint8_t(encoder_move(dir1, 0, 255, voice));
-    if (channel == 10)
-    {
-      synth_voice_config[channel-1].patch = _drum_prog_map[voice % 5];
-      strcpy(voice_name,_drum_name[voice % 5]);
-      voice=voice % 5;
-    }
-    else
-    {
-      synth_voice_config[channel-1].patch = voice;
-      voiceName(voice_name, voice / 128, voice % 128);
-    }
-    show(1, 0, 16, voice_name, false);
-    initSynth(channel, voice, 64, 0, 0, 0);
+    voice = uint8_t(encoder_move(dir1, 0, 127, long(voice)));
   }
 
   // Encoder2 handling
-  int8_t dir2 = Encoder2.hasChanged();
+  dir2 = Encoder2.hasChanged();
   if (dir2)
   {
-    channel = uint8_t(encoder_move(dir2, 1, 16, channel));
-    show(1, 18, 2, itoa(channel, _buf10, 10), true);
-  }
-  
-  // Get the updated value :
-  bool value = Button1.read();
-
-  // Turn on or off the LED as determined by the state :
-  if ( value == LOW ) {
-    digitalWrite(LED_PIN, HIGH );
-  }
-  else {
-    digitalWrite(LED_PIN, LOW );
+    channel = uint8_t(encoder_move(dir2, 1, 16, long(channel)));
+    voice = synth_voice_config[channel].patch;
   }
 
-  boolean no = false;
-  if (millis() % 2000 == 0)
-  {
-    if (no == false)
+  // show UI
+  if (dir1 || dir2 || but1 || but2)
+    show_ui();
+
+  /*
+    boolean no = false;
+    if (millis() % 2000 == 0)
     {
-      synth.noteOn( 1, 64, 100 );
-      no = true;
+      if (no == false)
+      {
+        synth.noteOn( 1, 64, 100 );
+        no = true;
+      }
+      else
+      {
+        synth.noteOff( 1, 64 );
+        no = false;
+      }
     }
-    else
-    {
-      synth.noteOff( 1, 64 );
-      no = false;
-    }
-  }
+  */
 }
 
 //**************************************************************************
 // FUNCTIONS
+
+void show_ui(void)
+{
+  char voice_name[17];
+
+  // Show-UI
+  if (channel == 9)
+  {
+    synth_voice_config[channel].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice % 5]));
+    strcpy_P(voice_name, (char*)pgm_read_word(&(_drum_name[voice % 5])));
+  }
+  else
+  {
+    voiceName(voice_name, bank, voice);
+  }
+  show_string(1, 0, 16, voice_name);
+  show_num(1, 18, 2, channel);
+}
 
 // Output routine for FluxSynth.
 bool sendMidiByte(byte B)
@@ -221,9 +230,9 @@ bool sendMidiByte(byte B)
   return true;
 }
 
-void initSynth(byte Chan, byte Patch, byte Vol, byte Rev, byte Chor, byte Bend)
+void initSynth(byte Bank, byte Chan, byte Patch, byte Vol, byte Rev, byte Chor, byte Bend)
 {
-  synth.programChange( Chan, Patch );
+  synth.programChange( Chan, Bank, Patch );
   synth.setChannelVolume( Chan, Vol );
   synth.setReverbSend( Chan, Rev );
   synth.setChorusSend( Chan, Chor );
@@ -235,14 +244,29 @@ void voiceName(char *buffer, uint8_t bank, uint8_t program)
   strcpy_P(buffer, (char*)pgm_read_word(&(_voice_name[bank * 128 + program])));
 }
 
-void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool justify_right)
+void show_string(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str)
+{
+  show(pos_y, pos_x, field_size, str, false, false);
+}
+
+void show_num(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, long num)
+{
+  char _buf10[11];
+
+  show(pos_y, pos_x, field_size, itoa(num, _buf10, 10), true, true);
+}
+
+void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool justify_right, bool fill_zero)
 {
   char tmp[LCD_CHARS + 1];
   char *s = tmp;
   uint8_t l = strlen(str);
 
-  memset(tmp, 0x20, LCD_CHARS);
-  tmp[LCD_CHARS] = '\0';
+  if (fill_zero == true)
+    memset(tmp, '0', field_size);
+  else
+    memset(tmp, 0x20, field_size); // blank
+  tmp[field_size] = '\0';
 
   if (l > field_size)
     l = field_size;
@@ -251,7 +275,6 @@ void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool just
     s += field_size - l;
 
   strncpy(s, str, l);
-  s[field_size] = '\0';
 
   lcd.setCursor(pos_x, pos_y);
   lcd.print(tmp);

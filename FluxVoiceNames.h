@@ -534,3 +534,4 @@ const char * const _drum_name[] PROGMEM =
 };
 
 const uint8_t _drum_prog_map[] PROGMEM = {DRUMS_Std,DRUMS_Power,DRUMS_Brush,DRUMS_Orchestra,DRUMS_CM64};
+
