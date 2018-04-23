@@ -68,6 +68,7 @@ struct SynthVoice
 } synth_voice_config[16];
 
 #define MAX_STORAGE 8
+//#define INIT_STORAGE 1
 
 //**************************************************************************
 // GLOBALS
@@ -91,7 +92,7 @@ Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 
 // vars
 uint8_t voice = 0;
-uint8_t channel = 1;
+uint8_t channel = 0;
 uint8_t bank = PATCH_BANK0;
 uint8_t refresh = REFRESH;
 
@@ -130,7 +131,12 @@ void setup(void)
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
+#ifdef INIT_STORAGE
+  init_storage();
+  store_voice_setup(0);
+#else
   restore_voice_setup(0);
+#endif
 
   //lcd.clear();
 }
@@ -156,9 +162,9 @@ void loop(void)
     if (Button2.fell())
     {
       bitSet(refresh, REFRESH_BUT2);
-      synth_voice_config[channel-1].patch = voice;
-      initSynth(channel - 1, bank, voice, 64, 0, 0, 0);
-      //store_voice_setup(0);
+      synth_voice_config[channel].patch = voice;
+      initSynth(channel, bank, voice, 64, 0, 0, 0);
+      store_voice_setup(0, channel);
     }
   }
 
@@ -168,6 +174,7 @@ void loop(void)
   {
     bitSet(refresh, REFRESH_ENC1);
     voice = uint8_t(encoder_move(dir, 0, 127, long(voice)));
+    synth_voice_config[channel].patch = voice;
   }
 
   // Encoder2 handling
@@ -175,8 +182,8 @@ void loop(void)
   if (dir)
   {
     bitSet(refresh, REFRESH_ENC2);
-    channel = uint8_t(encoder_move(dir, 1, 16, long(channel)));
-    voice = synth_voice_config[channel-1].patch;
+    channel = uint8_t(encoder_move(dir, 0, 15, long(channel)));
+    voice = synth_voice_config[channel].patch;
   }
 
   // show UI
@@ -209,17 +216,18 @@ void show_ui(void)
   char voice_name[17];
 
   // Show-UI
-  if (channel == 10)
+  if (channel == 9)
   {
-    synth_voice_config[channel-1].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice % 5]));
-    strcpy_P(voice_name, (char*)pgm_read_word(&(_drum_name[voice % 5])));
+    voice = voice % 5;
+    synth_voice_config[channel].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice]));
+    strcpy_P(voice_name, (char*)pgm_read_word(&(_drum_name[voice])));
   }
   else
   {
-    voiceName(voice_name, bank, synth_voice_config[channel-1].patch);
+    voiceName(voice_name, bank, synth_voice_config[channel].patch);
   }
   show_string(1, 0, 16, voice_name);
-  show_num(1, 18, 2, channel);
+  show_num(1, 18, 2, channel + 1);
 
   refresh = 0;
 }
@@ -302,7 +310,18 @@ long encoder_move(int8_t dir, int16_t min, int16_t max, long value)
   return (value);
 }
 
-void store_voice_setup(uint8_t n)
+void store_voice_setup(uint8_t n, uint8_t channel)
+{
+  uint8_t v;
+
+  if (n > MAX_STORAGE - 1 || channel > 15)
+    return;
+
+  // store voice configs
+  EEPROM.put(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + channel * sizeof(synth_voice_config), synth_voice_config[channel]);
+}
+
+void store_all_voice_setup(uint8_t n)
 {
   uint8_t v;
 
@@ -314,10 +333,9 @@ void store_voice_setup(uint8_t n)
   for (v = 0; v < 16; v++)
   {
     // store voice configs
-    EEPROM.put(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + v * sizeof(synth_voice_config), synth_voice_config[v]);
+    store_voice_setup(n, v);
   }
 }
-
 void restore_voice_setup(uint8_t n)
 {
   uint8_t v;
@@ -335,3 +353,19 @@ void restore_voice_setup(uint8_t n)
     Serial.println(synth_voice_config[v].patch);
   }
 }
+
+#ifdef INIT_STORAGE
+void init_storage(void)
+{
+  show_string(1, 0, 20, "Init Storage");
+
+  for (uint16_t i = 0 ; i < EEPROM.length() ; i++)
+  {
+    show_num(2, 0, 4, i);
+    EEPROM.write(i, 0);
+  }
+
+  show_string(1, 0, 20, "");
+  show_string(2, 0, 20, "");
+}
+#endif
