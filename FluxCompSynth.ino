@@ -11,9 +11,9 @@
 #include <PgmChange.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C (https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library) */
-//#define ENCODER_DO_NOT_USE_INTERRUPTS // Avoid problems with NewSoftwareSerial
 #include <RotaryEncoderDir.h> /* https://github.com/dcoredump/RotaryEncoderDir.git */
 #include <Bounce2.h> /* https://github.com/thomasfredericks/Bounce2 */
+#include <EEPROM.h>
 #include "FluxVoiceNames.h" // Voice names in PROGMEM
 
 #define DEBUG 1
@@ -40,6 +40,12 @@
 #define POT3_PIN A2
 #define POT4_PIN A3
 
+#define REFRESH_BUT1 0
+#define REFRESH_BUT2 1
+#define REFRESH_ENC1 2
+#define REFRESH_ENC2 3
+#define REFRESH 7
+
 struct SynthGlobal
 {
   int8_t volume = 100; // negative means OFF
@@ -60,6 +66,8 @@ struct SynthVoice
   uint8_t chorus_send = 0;
   uint8_t bend_range = 12;
 } synth_voice_config[16];
+
+#define MAX_STORAGE 8
 
 //**************************************************************************
 // GLOBALS
@@ -85,9 +93,7 @@ Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 uint8_t voice = 0;
 uint8_t channel = 1;
 uint8_t bank = PATCH_BANK0;
-
-// Temp buffers
-//char _buf10[11];
+uint8_t refresh = REFRESH;
 
 //
 //**************************************************************************
@@ -109,23 +115,6 @@ void setup(void)
 
   show_string(0, 0, 20, "FluxCompSynth");
 
-  /*  //------------------------<TESTCODE>
-    uint8_t voice;
-    uint8_t bank;
-    char b[16];
-
-    for (bank = 0; bank <= 1; bank++)
-    {
-      for (voice = 0; voice <= 127; voice++)
-      {
-        show(1, 0, 1, itoa(bank, _buf10, 10), true);
-        show(1, 2, 3, itoa(voice, _buf10, 10), true);
-        voiceName(b, bank, voice);
-        show(1, 6, 16, b, false);
-      }
-    }
-    //------------------------</TESTCODE>
-  */
   midiport.begin(31250);
   synth.begin();
   synth.sendByte = sendMidiByte;
@@ -141,47 +130,57 @@ void setup(void)
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
+  restore_voice_setup(0);
+
   //lcd.clear();
 }
 
 void loop(void)
 {
-  int8_t dir1=0;
-  int8_t dir2=0;
-  int8_t but1=0;
-  int8_t but2=0;
-  
+  int8_t dir = 0;
+
   // do the update stuff
   Encoder1.tick();
   Encoder2.tick();
-  if (but1=Button1.update())
+
+  // handle buttons
+  if (Button1.update())
   {
     if (Button1.fell())
     {
-      synth_voice_config[channel].patch = voice;
-      initSynth(channel, bank, voice, 64, 0, 0, 0);
-      Serial.println("Storing...");
+      bitSet(refresh, REFRESH_BUT1);
     }
   }
-  Button2.update();
+  if (Button2.update())
+  {
+    if (Button2.fell())
+    {
+      bitSet(refresh, REFRESH_BUT2);
+      synth_voice_config[channel-1].patch = voice;
+      initSynth(channel - 1, bank, voice, 64, 0, 0, 0);
+      //store_voice_setup(0);
+    }
+  }
 
   // Encoder1 handling
-  dir1 = Encoder1.hasChanged();
-  if (dir1)
+  dir = Encoder1.hasChanged();
+  if (dir)
   {
-    voice = uint8_t(encoder_move(dir1, 0, 127, long(voice)));
+    bitSet(refresh, REFRESH_ENC1);
+    voice = uint8_t(encoder_move(dir, 0, 127, long(voice)));
   }
 
   // Encoder2 handling
-  dir2 = Encoder2.hasChanged();
-  if (dir2)
+  dir = Encoder2.hasChanged();
+  if (dir)
   {
-    channel = uint8_t(encoder_move(dir2, 1, 16, long(channel)));
-    voice = synth_voice_config[channel].patch;
+    bitSet(refresh, REFRESH_ENC2);
+    channel = uint8_t(encoder_move(dir, 1, 16, long(channel)));
+    voice = synth_voice_config[channel-1].patch;
   }
 
   // show UI
-  if (dir1 || dir2 || but1 || but2)
+  if (refresh)
     show_ui();
 
   /*
@@ -210,17 +209,19 @@ void show_ui(void)
   char voice_name[17];
 
   // Show-UI
-  if (channel == 9)
+  if (channel == 10)
   {
-    synth_voice_config[channel].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice % 5]));
+    synth_voice_config[channel-1].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice % 5]));
     strcpy_P(voice_name, (char*)pgm_read_word(&(_drum_name[voice % 5])));
   }
   else
   {
-    voiceName(voice_name, bank, voice);
+    voiceName(voice_name, bank, synth_voice_config[channel-1].patch);
   }
   show_string(1, 0, 16, voice_name);
   show_num(1, 18, 2, channel);
+
+  refresh = 0;
 }
 
 // Output routine for FluxSynth.
@@ -301,3 +302,36 @@ long encoder_move(int8_t dir, int16_t min, int16_t max, long value)
   return (value);
 }
 
+void store_voice_setup(uint8_t n)
+{
+  uint8_t v;
+
+  if (n > MAX_STORAGE - 1)
+    return;
+
+  // store global config
+  EEPROM.put(n * (sizeof(synth_config) + sizeof(synth_voice_config)), synth_config);
+  for (v = 0; v < 16; v++)
+  {
+    // store voice configs
+    EEPROM.put(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + v * sizeof(synth_voice_config), synth_voice_config[v]);
+  }
+}
+
+void restore_voice_setup(uint8_t n)
+{
+  uint8_t v;
+
+  if (n > MAX_STORAGE - 1)
+    return;
+
+  // restore global config
+  EEPROM.get(n * (sizeof(synth_config) + sizeof(synth_voice_config)), synth_config);
+  for (v = 0; v < 16; v++)
+  {
+    // store voice configs
+    EEPROM.get(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + v * sizeof(synth_voice_config), synth_voice_config[v]);
+    Serial.print("V:");
+    Serial.println(synth_voice_config[v].patch);
+  }
+}
