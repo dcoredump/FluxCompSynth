@@ -10,7 +10,7 @@
 #include <SoftwareSerial.h>
 #include <PgmChange.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C (https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library) */
+#include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C */
 #include <RotaryEncoderDir.h> /* https://github.com/dcoredump/RotaryEncoderDir.git */
 #include <Bounce2.h> /* https://github.com/thomasfredericks/Bounce2 */
 #include <EEPROM.h>
@@ -77,7 +77,6 @@ struct SynthVoice
   uint8_t bend_range = 12;
 } synth_voice_config[16];
 
-#define MAX_STORAGE 8
 //#define INIT_STORAGE 1
 
 //**************************************************************************
@@ -105,7 +104,7 @@ uint8_t voice = 0;
 uint8_t channel = 0;
 uint8_t bank = PATCH_BANK0;
 uint8_t refresh = REFRESH;
-
+const uint8_t max_storage=EEPROM.length()/(sizeof(SynthVoice)*16+sizeof(SynthGlobal));
 //
 //**************************************************************************
 // MAIN FUNCTIONS
@@ -114,7 +113,7 @@ void setup(void)
 {
 #ifdef DEBUG
   Serial.begin(115200);
-  Serial.println(sizeof(SynthVoice)*16+sizeof(SynthGlobal));
+  //Serial.println(sizeof(SynthVoice)*16+sizeof(SynthGlobal));
 #endif
 
   lcd.init();
@@ -286,6 +285,7 @@ void setConfig(void)
   }
   else
     synth.enableReverb(false);
+    
   // Chorus
   if (synth_config.chorus_program >= 0)
   {
@@ -363,7 +363,7 @@ void store_voice_setup(uint8_t n, uint8_t channel)
 {
   uint8_t v;
 
-  if (n > MAX_STORAGE - 1 || channel > 15)
+  if (n > max_storage - 1 || channel > 15)
     return;
 
   // store voice configs
@@ -374,7 +374,7 @@ void store_setup(uint8_t n)
 {
   uint8_t v;
 
-  if (n > MAX_STORAGE - 1)
+  if (n > max_storage - 1)
     return;
 
   // store global config
@@ -389,7 +389,7 @@ void restore_setup(uint8_t n)
 {
   uint8_t v;
 
-  if (n > MAX_STORAGE - 1)
+  if (n > max_storage - 1)
     return;
 
   // restore global config
