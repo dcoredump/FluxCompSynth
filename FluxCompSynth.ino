@@ -7,7 +7,7 @@
 //
 
 #include <FluxSynth.h> /* https://sourceforge.net/projects/flexamysynth/files/ */
-#include <NewSoftSerial.h>
+#include <SoftwareSerial.h>
 #include <PgmChange.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C (https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library) */
@@ -48,16 +48,26 @@
 
 struct SynthGlobal
 {
-  int8_t volume = 100; // negative means OFF
-  uint8_t reverb_type = REV_ROOM1;
+  int8_t volume = 50; // negative means OFF
+  int8_t pan = 0;
+  int8_t transpose = 0;
   uint8_t reverb_level = REV_DEFLEVEL;
-  uint8_t chorus_type = CHO_CHORUS1;
+  int8_t reverb_program = REV_ROOM1; // negative means OFF, 0-7
+  uint8_t reverb_time = 50;
+  uint8_t reverb_feedback = 10;
+  uint8_t reverb_character = 0;
   uint8_t chorus_level = 0;
+  int8_t chorus_program = CHO_CHORUS1; // negative means OFF, 0-7
+  uint8_t chorus_delay = 50;
+  uint8_t chorus_feedback = 10;
+  uint8_t chorus_rate = 10;
+  uint8_t chorus_depth = 20;
   uint8_t clipping = SOFT_CLIP;
 } synth_config;
 
 struct SynthVoice
 {
+
   uint8_t patch = 0;
   int8_t volume = 64; // negative means OFF
   int8_t pan = 0;   // 0=middle
@@ -77,7 +87,7 @@ struct SynthVoice
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
 
 // Outgoing serial port
-NewSoftSerial midiport(255, FLUXAMA_MIDI_IN_PIN); // 255 = OFF
+SoftwareSerial midiport(255, FLUXAMA_MIDI_IN_PIN); // 255 = OFF
 
 // Synth
 FluxSynth synth;
@@ -104,6 +114,7 @@ void setup(void)
 {
 #ifdef DEBUG
   Serial.begin(115200);
+  Serial.println(sizeof(SynthVoice)*16+sizeof(SynthGlobal));
 #endif
 
   lcd.init();
@@ -121,7 +132,11 @@ void setup(void)
   synth.sendByte = sendMidiByte;
   synth.midiReset();
   synth.GS_Reset();
-
+  synth.GM_Reset();
+  synth.postprocGeneralMidi(true);  // Surround + EQ on GM
+  synth.postprocReverbChorus(true); // Surround + EQ on Reverb and Chorus
+  synth.surroundMonoIn(false);
+  
   pinMode(ENCODER1_BUTTON_PIN, INPUT_PULLUP);
   pinMode(ENCODER2_BUTTON_PIN, INPUT_PULLUP);
   pinMode(POT1_PIN, INPUT_PULLUP);
@@ -133,9 +148,10 @@ void setup(void)
 
 #ifdef INIT_STORAGE
   init_storage();
-  store_voice_setup(0);
+  for(uint8_t i=0;i<16;i++)
+    store_setup(0,i);
 #else
-  restore_voice_setup(0);
+  restore_setup(0);
 #endif
 
   //lcd.clear();
@@ -162,8 +178,8 @@ void loop(void)
     if (Button2.fell())
     {
       bitSet(refresh, REFRESH_BUT2);
-      synth_voice_config[channel].patch = voice;
-      initSynth(channel, bank, voice, 64, 0, 0, 0);
+      synth_voice_config[channel].patch = (bank << 7)|voice;
+      setSynth(channel);
       store_voice_setup(0, channel);
     }
   }
@@ -239,13 +255,46 @@ bool sendMidiByte(byte B)
   return true;
 }
 
-void initSynth(byte Bank, byte Chan, byte Patch, byte Vol, byte Rev, byte Chor, byte Bend)
+void setSynth(uint8_t channel)
 {
-  synth.programChange( Chan, Bank, Patch );
-  synth.setChannelVolume( Chan, Vol );
-  synth.setReverbSend( Chan, Rev );
-  synth.setChorusSend( Chan, Chor );
-  synth.setBendRange( Chan, Bend );
+  synth.programChange(channel, synth_voice_config[channel].patch & 0x7f, synth_voice_config[channel].patch >> 7);
+  synth.setChannelVolume(channel, synth_voice_config[channel].volume);
+  synth.GM_Volume(channel, synth_voice_config[channel].volume);
+  synth.GM_Pan(channel, synth_voice_config[channel].pan);
+  synth.setReverbSend(channel, synth_voice_config[channel].reverb_send);
+  synth.GM_ReverbSend(channel, synth_voice_config[channel].reverb_send);
+  synth.setChorusSend(channel, synth_voice_config[channel].chorus_send);
+  synth.GM_ChorusSend(channel, synth_voice_config[channel].chorus_send);
+  synth.setBendRange(channel, synth_voice_config[channel].bend_range );
+}
+
+void setConfig(void)
+{
+  // Global settings
+  synth.setMasterVolume(synth_config.volume);
+  synth.GS_MasterVolume(synth_config.volume);
+  synth.GS_MasterPan(synth_config.pan);
+  synth.setClippingMode(synth_config.clipping);
+  synth.setMasterTranspose(synth_config.transpose);
+
+  // Reverb
+  if (synth_config.reverb_program >= 0)
+  {
+    synth.enableReverb(true);
+    synth.setReverb(synth_config.reverb_program, synth_config.reverb_time, synth_config.reverb_feedback, synth_config.reverb_character);
+    synth.setReverbLevel(synth_config.reverb_level);
+  }
+  else
+    synth.enableReverb(false);
+  // Chorus
+  if (synth_config.chorus_program >= 0)
+  {
+    synth.enableEffects(true);
+    synth.setChorus(synth_config.chorus_program, synth_config.chorus_delay, synth_config.chorus_feedback, synth_config.chorus_rate, synth_config.chorus_depth);
+    synth.setChorusLevel(synth_config.chorus_level);
+  }
+  else
+    synth.enableEffects(false);
 }
 
 void voiceName(char *buffer, uint8_t bank, uint8_t program)
@@ -321,7 +370,7 @@ void store_voice_setup(uint8_t n, uint8_t channel)
   EEPROM.put(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + channel * sizeof(synth_voice_config), synth_voice_config[channel]);
 }
 
-void store_all_voice_setup(uint8_t n)
+void store_setup(uint8_t n)
 {
   uint8_t v;
 
@@ -336,7 +385,7 @@ void store_all_voice_setup(uint8_t n)
     store_voice_setup(n, v);
   }
 }
-void restore_voice_setup(uint8_t n)
+void restore_setup(uint8_t n)
 {
   uint8_t v;
 
@@ -345,13 +394,13 @@ void restore_voice_setup(uint8_t n)
 
   // restore global config
   EEPROM.get(n * (sizeof(synth_config) + sizeof(synth_voice_config)), synth_config);
+  setConfig();
   for (v = 0; v < 16; v++)
   {
-    // store voice configs
+    // restore voice configs
     EEPROM.get(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + v * sizeof(synth_voice_config), synth_voice_config[v]);
-    Serial.print("V:");
-    Serial.println(synth_voice_config[v].patch);
   }
+  synth.restartEffects();
 }
 
 #ifdef INIT_STORAGE
