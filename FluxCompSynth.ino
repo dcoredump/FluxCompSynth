@@ -8,6 +8,7 @@
 
 #include <FluxSynth.h> /* https://sourceforge.net/projects/flexamysynth/files/ */
 #include <SoftwareSerial.h>
+#include <MIDI.h>
 #include <PgmChange.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C */
@@ -17,6 +18,7 @@
 #include "FluxVoiceNames.h" // Voice names in PROGMEM
 
 #define DEBUG 1
+//#define INIT_STORAGE 1
 
 #define LED_PIN 13
 
@@ -24,7 +26,8 @@
 #define LCD_CHARS 20
 #define LCD_LINES 4
 
-#define FLUXAMA_MIDI_IN_PIN 4
+#define FLUXAMA_MIDI_OUT_PIN 4
+#define FLUXAMA_MIDI_IN_PIN 3
 
 #define MAX_ENCODER 2
 #define ENCODER1_PIN_A 5
@@ -48,7 +51,7 @@
 
 struct SynthGlobal
 {
-  int8_t volume = 50; // negative means OFF
+  int8_t level = 50; // negative means OFF
   int8_t pan = 0;
   int8_t transpose = 0;
   uint8_t reverb_level = REV_DEFLEVEL;
@@ -63,12 +66,19 @@ struct SynthGlobal
   uint8_t chorus_rate = 10;
   uint8_t chorus_depth = 20;
   uint8_t clipping = SOFT_CLIP;
+#ifdef EXTENDED_SETUP
+  uint8_t eq_bass = 0;
+  uint8_t eq_lowmid = 0;
+  uint8_t eq_highmid = 0;
+  uint8_t eq_high = 0;
+  uint8_t surround_postproc = 0; // Bit0: enable sourround, Bit1: enable surround+eq on GM, Bit2: enable surround+eq on reverb/chorus
+#endif
 } synth_config;
 
 struct SynthVoice
 {
-
-  uint8_t patch = 0;
+  int8_t patch = -1;
+  uint8_t bank = 0;
   int8_t volume = 64; // negative means OFF
   int8_t pan = 0;   // 0=middle
   int8_t transpose = 0;
@@ -77,7 +87,17 @@ struct SynthVoice
   uint8_t bend_range = 12;
 } synth_voice_config[16];
 
-//#define INIT_STORAGE 1
+#ifdef EXTENDED_SETUP
+struct SynthDrumMix
+{
+  int8_t note = 48; // C3
+  uint8_t level = 127;
+  int8_t pan = 0;
+  uint8_t reverb_send = 0;
+  uint8_t chorus_send = 0;
+  uint8_t pitch = 64;
+} synth_drummix_config[79]; // Note 27 (D#1)- 106( A#7)
+#endif
 
 //**************************************************************************
 // GLOBALS
@@ -85,8 +105,12 @@ struct SynthVoice
 // for  LCD-Modul QC2204A LCD2004 I2C-Controller
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
 
-// Outgoing serial port
-SoftwareSerial midiport(255, FLUXAMA_MIDI_IN_PIN); // 255 = OFF
+// Fluxama serial port
+SoftwareSerial fluxama(255, FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
+
+// MIDI-IN port
+SoftwareSerial midiport(FLUXAMA_MIDI_IN_PIN, 255); // 255 = OFF
+MIDI_CREATE_INSTANCE(SoftwareSerial, midiport, midi_in);
 
 // Synth
 FluxSynth synth;
@@ -100,11 +124,11 @@ Bounce Button1 = Bounce(ENCODER1_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 
 // vars
-uint8_t voice = 0;
+int8_t voice = -1;
 uint8_t channel = 0;
 uint8_t bank = PATCH_BANK0;
 uint8_t refresh = REFRESH;
-const uint8_t max_storage=EEPROM.length()/(sizeof(SynthVoice)*16+sizeof(SynthGlobal));
+const uint8_t max_storage = EEPROM.length() / (sizeof(SynthVoice) * 16 + sizeof(SynthGlobal));
 //
 //**************************************************************************
 // MAIN FUNCTIONS
@@ -126,15 +150,17 @@ void setup(void)
 
   show_string(0, 0, 20, "FluxCompSynth");
 
-  midiport.begin(31250);
+  fluxama.begin(31250);
   synth.begin();
   synth.sendByte = sendMidiByte;
   synth.midiReset();
   synth.GS_Reset();
   synth.GM_Reset();
-  synth.postprocGeneralMidi(true);  // Surround + EQ on GM
-  synth.postprocReverbChorus(true); // Surround + EQ on Reverb and Chorus
+  synth.postprocGeneralMidi(false);  // Surround + EQ on GM
+  synth.postprocReverbChorus(false); // Surround + EQ on Reverb and Chorus
   synth.surroundMonoIn(false);
+
+  midi_in.begin(MIDI_CHANNEL_OMNI);
   
   pinMode(ENCODER1_BUTTON_PIN, INPUT_PULLUP);
   pinMode(ENCODER2_BUTTON_PIN, INPUT_PULLUP);
@@ -147,8 +173,8 @@ void setup(void)
 
 #ifdef INIT_STORAGE
   init_storage();
-  for(uint8_t i=0;i<16;i++)
-    store_setup(0,i);
+  for (uint8_t i = 0; i < 16; i++)
+    store_setup(0, i);
 #else
   restore_setup(0);
 #endif
@@ -159,6 +185,9 @@ void setup(void)
 void loop(void)
 {
   int8_t dir = 0;
+
+  // Forward MIDI-IN to Fluxama
+  fluxama.write(midi_in.read());
 
   // do the update stuff
   Encoder1.tick();
@@ -177,7 +206,7 @@ void loop(void)
     if (Button2.fell())
     {
       bitSet(refresh, REFRESH_BUT2);
-      synth_voice_config[channel].patch = (bank << 7)|voice;
+      synth_voice_config[channel].patch = (bank << 7) | voice;
       setSynth(channel);
       store_voice_setup(0, channel);
     }
@@ -188,7 +217,7 @@ void loop(void)
   if (dir)
   {
     bitSet(refresh, REFRESH_ENC1);
-    voice = uint8_t(encoder_move(dir, 0, 127, long(voice)));
+    voice = uint8_t(encoder_move(dir, -1, 127, long(voice)));
     synth_voice_config[channel].patch = voice;
   }
 
@@ -231,18 +260,26 @@ void show_ui(void)
   char voice_name[17];
 
   // Show-UI
-  if (channel == 9)
+  if (voice < 0)
   {
-    voice = voice % 5;
-    synth_voice_config[channel].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice]));
-    strcpy_P(voice_name, (char*)pgm_read_word(&(_drum_name[voice])));
+    show_string(1, 0, 16, "OFF");
+    show_num(1, 18, 2, channel + 1);
   }
   else
   {
-    voiceName(voice_name, bank, synth_voice_config[channel].patch);
+    if (channel == 9)
+    {
+      voice = voice % 5;
+      synth_voice_config[channel].patch = uint8_t(pgm_read_byte(&_drum_prog_map[voice]));
+      strcpy_P(voice_name, (char*)pgm_read_word(&(_drum_name[voice])));
+    }
+    else
+    {
+      voiceName(voice_name, bank, synth_voice_config[channel].patch);
+    }
+    show_string(1, 0, 16, voice_name);
+    show_num(1, 18, 2, channel + 1);
   }
-  show_string(1, 0, 16, voice_name);
-  show_num(1, 18, 2, channel + 1);
 
   refresh = 0;
 }
@@ -250,7 +287,7 @@ void show_ui(void)
 // Output routine for FluxSynth.
 bool sendMidiByte(byte B)
 {
-  midiport.write(B);
+  fluxama.write(B);
   return true;
 }
 
@@ -270,8 +307,8 @@ void setSynth(uint8_t channel)
 void setConfig(void)
 {
   // Global settings
-  synth.setMasterVolume(synth_config.volume);
-  synth.GS_MasterVolume(synth_config.volume);
+  synth.setMasterVolume(synth_config.level);
+  synth.GS_MasterVolume(synth_config.level);
   synth.GS_MasterPan(synth_config.pan);
   synth.setClippingMode(synth_config.clipping);
   synth.setMasterTranspose(synth_config.transpose);
@@ -285,7 +322,7 @@ void setConfig(void)
   }
   else
     synth.enableReverb(false);
-    
+
   // Chorus
   if (synth_config.chorus_program >= 0)
   {
@@ -401,6 +438,7 @@ void restore_setup(uint8_t n)
     EEPROM.get(n * (sizeof(synth_config) + sizeof(synth_voice_config)) + sizeof(synth_config) + v * sizeof(synth_voice_config), synth_voice_config[v]);
   }
   synth.restartEffects();
+  voice = synth_voice_config[channel].patch;
 }
 
 #ifdef INIT_STORAGE
