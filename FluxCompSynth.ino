@@ -19,6 +19,7 @@
 
 #define DEBUG 1
 //#define INIT_STORAGE 1
+#define PLAY_TEST_CHORD 1
 
 #define LED_PIN 13
 
@@ -29,25 +30,59 @@
 #define FLUXAMA_MIDI_OUT_PIN 4
 #define FLUXAMA_MIDI_IN_PIN 3
 
-#define MAX_ENCODER 2
+#define DEBOUNCE_INTERVAL_MS 5
 #define ENCODER1_PIN_A 5
 #define ENCODER1_PIN_B 6
-#define ENCODER1_BUTTON_PIN 10
-#define ENCODER2_PIN_A 7
-#define ENCODER2_PIN_B 8
-#define ENCODER2_BUTTON_PIN 11
-#define DEBOUNCE_INTERVAL_MS 5
+#define ENCODER1_BUTTON_PIN 7
+#define ENCODER2_PIN_A 8
+#define ENCODER2_PIN_B 9
+#define ENCODER2_BUTTON_PIN 10
+#ifdef EXTENDED_SETUP
+#define ENCODER3_PIN_A 11
+#define ENCODER3_PIN_B 12
+#define ENCODER3_BUTTON_PIN 13
+#define MAX_ENCODER 3
+#else
+#define MAX_ENCODER 2
+#endif
 
 #define POT1_PIN A0
 #define POT2_PIN A1
 #define POT3_PIN A2
 #define POT4_PIN A3
+#ifdef EXTENDED_SETUP
+#define POT1_PIN A4
+#define POT1_PIN A5
+#define POT1_PIN A6
+#define POT1_PIN A7
+#define POT1_PIN A8
+#define POT1_PIN A9
+#define POT1_PIN A10
+#define POT1_PIN A11
+#define POT1_PIN A12
+#define POT1_PIN A13
+#define POT1_PIN A14
+#define POT1_PIN A15
+#endif
 
 #define REFRESH_BUT1 0
 #define REFRESH_BUT2 1
-#define REFRESH_ENC1 2
-#define REFRESH_ENC2 3
+#ifdef EXTENDED_SETUP
+#define REFRESH_BUT3 2
+#endif
+#define REFRESH_ENC1 3
+#define REFRESH_ENC2 4
+#ifdef EXTENDED_SETUP
+#define REFRESH_ENC3 5
+#endif
+#define REFRESH_POT 6
 #define REFRESH 7
+
+//#if !defined(__AVR_ATmega2560__)  // Arduino MEGA2560
+//#error Arduino-MEGA-2560 is needed!
+//#else
+//#define EXTENDED_SETUP
+//#endif
 
 struct SynthGlobal
 {
@@ -106,11 +141,12 @@ struct SynthDrumMix
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
 
 // Fluxama serial port
-SoftwareSerial fluxama(255, FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
+//SoftwareSerial fluxama(255,FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
+SoftwareSerial fluxama(FLUXAMA_MIDI_IN_PIN,FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
 
 // MIDI-IN port
-SoftwareSerial midiport(FLUXAMA_MIDI_IN_PIN, 255); // 255 = OFF
-MIDI_CREATE_INSTANCE(SoftwareSerial, midiport, midi_in);
+//SoftwareSerial midiport(FLUXAMA_MIDI_IN_PIN, 255); // 255 = OFF
+//MIDI_CREATE_INSTANCE(SoftwareSerial, midiport, midi_in);
 
 // Synth
 FluxSynth synth;
@@ -160,8 +196,8 @@ void setup(void)
   synth.postprocReverbChorus(false); // Surround + EQ on Reverb and Chorus
   synth.surroundMonoIn(false);
 
-  midi_in.begin(MIDI_CHANNEL_OMNI);
-  
+  //midi_in.begin(MIDI_CHANNEL_OMNI);
+
   pinMode(ENCODER1_BUTTON_PIN, INPUT_PULLUP);
   pinMode(ENCODER2_BUTTON_PIN, INPUT_PULLUP);
   pinMode(POT1_PIN, INPUT_PULLUP);
@@ -187,7 +223,7 @@ void loop(void)
   int8_t dir = 0;
 
   // Forward MIDI-IN to Fluxama
-  fluxama.write(midi_in.read());
+  //fluxama.write(midi_in.read());
 
   // do the update stuff
   Encoder1.tick();
@@ -234,22 +270,26 @@ void loop(void)
   if (refresh)
     show_ui();
 
-  /*
-    boolean no = false;
-    if (millis() % 2000 == 0)
+#ifdef PLAY_TEST_CHORD
+  boolean no = false;
+  if (millis() % 2000 == 0)
+  {
+    if (no == false)
     {
-      if (no == false)
-      {
-        synth.noteOn( 1, 64, 100 );
-        no = true;
-      }
-      else
-      {
-        synth.noteOff( 1, 64 );
-        no = false;
-      }
+      synth.noteOn( 1, 64, 100 );
+      synth.noteOn( 1, 68, 100 );
+      synth.noteOn( 1, 71, 100 );
+      no = true;
     }
-  */
+    else
+    {
+      synth.noteOff( 1, 64 );
+      synth.noteOff( 1, 68 );
+      synth.noteOff( 1, 71 );
+      no = false;
+    }
+  }
+#endif
 }
 
 //**************************************************************************
