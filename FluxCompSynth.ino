@@ -17,6 +17,13 @@
 #include <EEPROM.h>
 #include "FluxVoiceNames.h" // Voice names in PROGMEM
 
+#if !defined(__AVR_ATmega2560__)  // Arduino MEGA2560
+#error Arduino-MEGA-2560 is needed!
+#else
+#define EXTENDED_SETUP
+#define FLUXAMA_MIDI_IN Serial1
+#endif
+
 #define DEBUG 1
 //#define INIT_STORAGE 1
 #define PLAY_TEST_CHORD 1
@@ -41,7 +48,10 @@
 #define ENCODER3_PIN_A 11
 #define ENCODER3_PIN_B 12
 #define ENCODER3_BUTTON_PIN 13
-#define MAX_ENCODER 3
+#define ENCODER4_PIN_A 22
+#define ENCODER4_PIN_B 23
+#define ENCODER4_BUTTON_PIN 24
+#define MAX_ENCODER 4
 #else
 #define MAX_ENCODER 2
 #endif
@@ -51,18 +61,18 @@
 #define POT3_PIN A2
 #define POT4_PIN A3
 #ifdef EXTENDED_SETUP
-#define POT1_PIN A4
-#define POT1_PIN A5
-#define POT1_PIN A6
-#define POT1_PIN A7
-#define POT1_PIN A8
-#define POT1_PIN A9
-#define POT1_PIN A10
-#define POT1_PIN A11
-#define POT1_PIN A12
-#define POT1_PIN A13
-#define POT1_PIN A14
-#define POT1_PIN A15
+#define POT5_PIN A4
+#define POT6_PIN A5
+#define POT7_PIN A6
+#define POT8_PIN A7
+#define POT9_PIN A8
+#define POT10_PIN A9
+#define POT11_PIN A10
+#define POT12_PIN A11
+#define POT13_PIN A12
+#define POT14_PIN A13
+#define POT15_PIN A14
+#define POT16_PIN A15
 #endif
 
 #define REFRESH_BUT1 0
@@ -77,12 +87,6 @@
 #endif
 #define REFRESH_POT 6
 #define REFRESH 7
-
-//#if !defined(__AVR_ATmega2560__)  // Arduino MEGA2560
-//#error Arduino-MEGA-2560 is needed!
-//#else
-//#define EXTENDED_SETUP
-//#endif
 
 struct SynthGlobal
 {
@@ -141,12 +145,11 @@ struct SynthDrumMix
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
 
 // Fluxama serial port
-//SoftwareSerial fluxama(255,FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
-SoftwareSerial fluxama(FLUXAMA_MIDI_IN_PIN,FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
+SoftwareSerial fluxama(255, FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
 
 // MIDI-IN port
 //SoftwareSerial midiport(FLUXAMA_MIDI_IN_PIN, 255); // 255 = OFF
-//MIDI_CREATE_INSTANCE(SoftwareSerial, midiport, midi_in);
+MIDI_CREATE_INSTANCE(HardwareSerial, FLUXAMA_MIDI_IN, midi_in);
 
 // Synth
 FluxSynth synth;
@@ -154,10 +157,18 @@ FluxSynth synth;
 // Encoder
 RotaryEncoderDir Encoder1(ENCODER1_PIN_A, ENCODER1_PIN_B);
 RotaryEncoderDir Encoder2(ENCODER2_PIN_A, ENCODER2_PIN_B);
+#ifdef EXTENDED_SETUP
+RotaryEncoderDir Encoder3(ENCODER3_PIN_A, ENCODER3_PIN_B);
+RotaryEncoderDir Encoder4(ENCODER4_PIN_A, ENCODER4_PIN_B);
+#endif
 
 // Buttons (debouncer)
 Bounce Button1 = Bounce(ENCODER1_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
 Bounce Button2 = Bounce(ENCODER2_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
+#ifdef EXTENDED_SETUP
+Bounce Button3 = Bounce(ENCODER3_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
+Bounce Button4 = Bounce(ENCODER4_BUTTON_PIN, DEBOUNCE_INTERVAL_MS);
+#endif
 
 // vars
 int8_t voice = -1;
@@ -205,6 +216,22 @@ void setup(void)
   pinMode(POT3_PIN, INPUT_PULLUP);
   pinMode(POT4_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
+#ifdef EXTENDED_SETUP
+  pinMode(ENCODER3_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(ENCODER4_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(POT5_PIN, INPUT_PULLUP);
+  pinMode(POT6_PIN, INPUT_PULLUP);
+  pinMode(POT7_PIN, INPUT_PULLUP);
+  pinMode(POT8_PIN, INPUT_PULLUP);
+  pinMode(POT9_PIN, INPUT_PULLUP);
+  pinMode(POT10_PIN, INPUT_PULLUP);
+  pinMode(POT11_PIN, INPUT_PULLUP);
+  pinMode(POT12_PIN, INPUT_PULLUP);
+  pinMode(POT13_PIN, INPUT_PULLUP);
+  pinMode(POT14_PIN, INPUT_PULLUP);
+  pinMode(POT15_PIN, INPUT_PULLUP);
+  pinMode(POT16_PIN, INPUT_PULLUP);
+#endif
   digitalWrite(LED_PIN, LOW);
 
 #ifdef INIT_STORAGE
