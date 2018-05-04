@@ -6,12 +6,13 @@
 // (c)2018 H. Wirtz <wirtz@parasitstudio.de>
 //
 
+#include "config.h"
 #include <FluxSynth.h> /* https://sourceforge.net/projects/flexamysynth/files/ */
 #include <SoftwareSerial.h>
 #include <MIDI.h>
 #include <PgmChange.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h> /* https://github.com/marcoschwartz/LiquidCrystal_I2C */
+#include <LiquidCrystalPlus_I2C.h> /* https://github.com/dcoredump/LiquidCrystalPlus_I2C (https://github.com/marcoschwartz/LiquidCrystal_I2C) */
 #include <RotaryEncoderDir.h> /* https://github.com/dcoredump/RotaryEncoderDir.git */
 #include <Bounce2.h> /* https://github.com/thomasfredericks/Bounce2 */
 #include <EEPROM.h>
@@ -20,13 +21,9 @@
 #if !defined(__AVR_ATmega2560__)  // Arduino MEGA2560
 #error Arduino-MEGA-2560 is needed!
 #else
-#define EXTENDED_SETUP
+//#define EXTENDED_SETUP
 #define FLUXAMA_MIDI_IN Serial1
 #endif
-
-#define DEBUG 1
-//#define INIT_STORAGE 1
-#define PLAY_TEST_CHORD 1
 
 #define LED_PIN 13
 
@@ -142,7 +139,7 @@ struct SynthDrumMix
 // GLOBALS
 
 // for  LCD-Modul QC2204A LCD2004 I2C-Controller
-LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
+LiquidCrystalPlus_I2C lcd(LCD_I2C_ADDRESS, LCD_CHARS, LCD_LINES);
 
 // Fluxama serial port
 SoftwareSerial fluxama(255, FLUXAMA_MIDI_OUT_PIN); // 255 = OFF
@@ -184,6 +181,7 @@ void setup(void)
 {
 #ifdef DEBUG
   Serial.begin(115200);
+  Serial.println(F("Start"));
   //Serial.println(sizeof(SynthVoice)*16+sizeof(SynthGlobal));
 #endif
 
@@ -195,7 +193,7 @@ void setup(void)
   lcd.clear();
   lcd.display();
 
-  show_string(0, 0, 20, "FluxCompSynth");
+  lcd.show(0, 0, 20, "FluxCompSynth");
 
   fluxama.begin(31250);
   synth.begin();
@@ -237,7 +235,7 @@ void setup(void)
 #ifdef INIT_STORAGE
   init_storage();
   for (uint8_t i = 0; i < 16; i++)
-    store_setup(0, i);
+    store_setup(i);
 #else
   restore_setup(0);
 #endif
@@ -329,8 +327,8 @@ void show_ui(void)
   // Show-UI
   if (voice < 0)
   {
-    show_string(1, 0, 16, "OFF");
-    show_num(1, 18, 2, channel + 1);
+    lcd.show(1, 0, 16, "OFF");
+    lcd.show(1, 18, 2, channel + 1);
   }
   else
   {
@@ -344,8 +342,8 @@ void show_ui(void)
     {
       voiceName(voice_name, bank, synth_voice_config[channel].patch);
     }
-    show_string(1, 0, 16, voice_name);
-    show_num(1, 18, 2, channel + 1);
+    lcd.show(1, 0, 16, voice_name);
+    lcd.show(1, 18, 2, channel + 1);
   }
 
   refresh = 0;
@@ -404,51 +402,6 @@ void setConfig(void)
 void voiceName(char *buffer, uint8_t bank, uint8_t program)
 {
   strcpy_P(buffer, (char*)pgm_read_word(&(_voice_name[bank * 128 + program])));
-}
-
-void show_string(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str)
-{
-  show(pos_y, pos_x, field_size, str, false, false);
-}
-
-void show_num(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, long num)
-{
-  char _buf10[11];
-
-  show(pos_y, pos_x, field_size, itoa(num, _buf10, 10), true, true);
-}
-
-void show(uint8_t pos_y, uint8_t pos_x, uint8_t field_size, char *str, bool justify_right, bool fill_zero)
-{
-  char tmp[LCD_CHARS + 1];
-  char *s = tmp;
-  uint8_t l = strlen(str);
-
-  if (fill_zero == true)
-    memset(tmp, '0', field_size);
-  else
-    memset(tmp, 0x20, field_size); // blank
-  tmp[field_size] = '\0';
-
-  if (l > field_size)
-    l = field_size;
-
-  if (justify_right == true)
-    s += field_size - l;
-
-  strncpy(s, str, l);
-
-  lcd.setCursor(pos_x, pos_y);
-  lcd.print(tmp);
-
-#ifdef DEBUG
-  Serial.print(pos_y, DEC);
-  Serial.print(F("/"));
-  Serial.print(pos_x, DEC);
-  Serial.print(F(": ["));
-  Serial.print(tmp);
-  Serial.println(F("]"));
-#endif
 }
 
 long encoder_move(int8_t dir, int16_t min, int16_t max, long value)
@@ -511,15 +464,15 @@ void restore_setup(uint8_t n)
 #ifdef INIT_STORAGE
 void init_storage(void)
 {
-  show_string(1, 0, 20, "Init Storage");
+  lcd.show(1, 0, 20, "Init Storage");
 
   for (uint16_t i = 0 ; i < EEPROM.length() ; i++)
   {
-    show_num(2, 0, 4, i);
+    lcd.show(2, 0, 4, i);
     EEPROM.write(i, 0);
   }
 
-  show_string(1, 0, 20, "");
-  show_string(2, 0, 20, "");
+  lcd.show(1, 0, 20, "");
+  lcd.show(2, 0, 20, "");
 }
 #endif

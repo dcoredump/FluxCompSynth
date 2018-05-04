@@ -1,6 +1,8 @@
 //
 // Storing names of the voices in PROGMEM
 //
+#ifndef FLUXVOICENAMES_H
+#define FLUXVOICENAMES_H 1
 const char _voice0[] PROGMEM = "GrandPiano";
 const char _voice1[] PROGMEM = "BrightPiano";
 const char _voice2[] PROGMEM = "ElecGrandPiano";
@@ -534,4 +536,4 @@ const char * const _drum_name[] PROGMEM =
 };
 
 const uint8_t _drum_prog_map[] PROGMEM = {DRUMS_Std,DRUMS_Power,DRUMS_Brush,DRUMS_Orchestra,DRUMS_CM64};
-
+#endif
